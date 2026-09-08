@@ -304,7 +304,71 @@ if abm:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Fig 10 — Jain's Fairness Index (from throughput_gbps proxy)
+# Fig 10 — Handover Scenario: FedAvg vs CA-PFedAvg vs FRL
+# ══════════════════════════════════════════════════════════════════════════════
+HANDOVER_DIR = Path("results/handover")
+HANDOVER_METHODS = {
+    "TCP-CUBIC":    HANDOVER_DIR / "tcp_metrics.json",
+    "FedAvg":       HANDOVER_DIR / "fedavg_metrics.json",
+    "CA-PFedAvg":   HANDOVER_DIR / "capfedavg_metrics.json",
+    "Flat-FRL":     HANDOVER_DIR / "flat_frl_metrics.json",
+    "GNN-FRL":      HANDOVER_DIR / "gnn_frl_metrics.json",
+}
+HO_COLORS = ["#7f7f7f", "#1f77b4", "#2ca02c", "#d62728", "#9467bd"]
+
+hm = {}
+for lbl, p in HANDOVER_METHODS.items():
+    d = load_file(p)
+    if d: hm[lbl] = d; print(f"[handover OK] {lbl}")
+    else: print(f"[handover --] {lbl} (no data)")
+
+if hm:
+    fig, axes = plt.subplots(1, 3, figsize=(16, 4))
+
+    # Throughput
+    ax = axes[0]
+    for lbl, clr in zip(HANDOVER_METHODS.keys(), HO_COLORS):
+        if lbl not in hm: continue
+        y = smooth(hm[lbl]["throughput_gbps"], w=20)
+        ax.plot(np.arange(len(y)), y, color=clr, lw=1.5, label=lbl)
+    ax.set_xlabel("Training Round", fontsize=11)
+    ax.set_ylabel("Throughput (Gbps)", fontsize=11)
+    ax.set_title("Throughput During Handover", fontsize=11)
+    ax.legend(fontsize=8); ax.grid(alpha=0.3)
+
+    # Federation participants over time
+    ax = axes[1]
+    for lbl, clr in zip(HANDOVER_METHODS.keys(), HO_COLORS):
+        if lbl not in hm or "fed_participants" not in hm[lbl]: continue
+        y = smooth(hm[lbl]["fed_participants"], w=20)
+        ax.plot(np.arange(len(y)), y, color=clr, lw=1.5, label=lbl)
+    ax.set_xlabel("Training Round", fontsize=11)
+    ax.set_ylabel("Federation Participants", fontsize=11)
+    ax.set_title("Satellites Participating in Federation", fontsize=11)
+    ax.legend(fontsize=8); ax.grid(alpha=0.3)
+
+    # GS visible count (same for all methods — shows orbit dynamics)
+    ax = axes[2]
+    if "FedAvg" in hm and "gs_visible_count" in hm["FedAvg"]:
+        vis = np.array(hm["FedAvg"]["gs_visible_count"])
+        y   = smooth(vis, w=20)
+        ax.fill_between(np.arange(len(y)), y, alpha=0.3, color="#1f77b4", label="Direct GS-visible")
+    if "CA-PFedAvg" in hm and "fed_participants" in hm["CA-PFedAvg"]:
+        relay = np.array(hm["CA-PFedAvg"]["fed_participants"])
+        y2    = smooth(relay, w=20)
+        ax.fill_between(np.arange(len(y2)), y2, alpha=0.3, color="#2ca02c", label="Relay-expanded")
+    ax.set_xlabel("Training Round", fontsize=11)
+    ax.set_ylabel("Satellite Count", fontsize=11)
+    ax.set_title("GS Contact: Direct vs Relay-Expanded", fontsize=11)
+    ax.legend(fontsize=9); ax.grid(alpha=0.3)
+
+    fig.suptitle("Handover Scenario: Federation Breaks with Direct-Only FedAvg", fontsize=12)
+    fig.tight_layout()
+    save_fig(fig, "fig10_handover"); plt.close(fig)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Fig 11 — Jain's Fairness Index (from throughput_gbps proxy)
 # Uses per-round throughput as a single-link proxy; real fairness needs
 # per-link data, but this illustrates trend.
 # ══════════════════════════════════════════════════════════════════════════════
@@ -330,7 +394,7 @@ if has_fairness:
     ax.set_ylim(0, 1.05)
     ax.set_title("Throughput Fairness Index (Jain's, J=1 is perfectly fair)", fontsize=12)
     ax.legend(fontsize=9, ncol=2); ax.grid(alpha=0.3)
-    save_fig(fig, "fig10_fairness"); plt.close(fig)
+    save_fig(fig, "fig11_fairness"); plt.close(fig)
 else:
     plt.close(fig)
 
