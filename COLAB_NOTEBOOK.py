@@ -223,8 +223,8 @@ class _Head(nn.Module):
         self.value = nn.Linear(64, 1)
 
     def forward(self, h):
-        a = torch.clamp(torch.softplus(self.alpha(h)) + 1.0, 1.0, 10.0)
-        b = torch.clamp(torch.softplus(self.beta(h))  + 1.0, 1.0, 10.0)
+        a = torch.clamp(torch.nn.functional.softplus(self.alpha(h)) + 1.0, 1.0, 10.0)
+        b = torch.clamp(torch.nn.functional.softplus(self.beta(h))  + 1.0, 1.0, 10.0)
         return a, b, self.value(h)
 
 
@@ -353,8 +353,8 @@ class _Head(nn.Module):
         self.value = nn.Linear(64, 1)
 
     def forward(self, h):
-        a = torch.clamp(torch.softplus(self.alpha(h)) + 1, 1, 10)
-        b = torch.clamp(torch.softplus(self.beta(h))  + 1, 1, 10)
+        a = torch.clamp(torch.nn.functional.softplus(self.alpha(h)) + 1, 1, 10)
+        b = torch.clamp(torch.nn.functional.softplus(self.beta(h))  + 1, 1, 10)
         return a, b, self.value(h)
 
 
