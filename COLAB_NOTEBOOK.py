@@ -308,7 +308,7 @@ class PPOAgent:
                 torch.nn.utils.clip_grad_norm_(
                     list(self.trunk.parameters()) + list(self.head.parameters()), 0.5)
                 self.opt.step()
-                losses.append(float(loss))
+                losses.append(loss.detach().item())
         return float(np.mean(losses))
 
 
@@ -448,7 +448,7 @@ class GNNPPOAgent:
                 torch.nn.utils.clip_grad_norm_(
                     list(self.trunk.parameters()) + list(self.head.parameters()), 0.5)
                 self.opt.step()
-                losses.append(float(loss))
+                losses.append(loss.detach().item())
         return float(np.mean(losses))
 
 
