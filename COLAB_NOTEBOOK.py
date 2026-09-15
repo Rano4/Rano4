@@ -899,11 +899,15 @@ net = ISLNetwork(seed=42)
 
 ag_tcp  = {"W": np.ones((N_SAT,N_SAT))*0.1, "tsl": np.zeros((N_SAT,N_SAT)), "x": np.zeros((N_SAT,N_SAT))}
 ag_ind  = make_flat(); x_ind  = np.zeros((N_SAT,N_SAT)); kp_ind  = np.zeros((N_SAT,N_SAT))
+ag_fav  = make_flat(); x_fav  = np.zeros((N_SAT,N_SAT)); kp_fav  = np.zeros((N_SAT,N_SAT))
+ag_cap  = make_flat(); x_cap  = np.zeros((N_SAT,N_SAT)); kp_cap  = np.zeros((N_SAT,N_SAT))
 ag_flat = make_flat(); x_flat = np.zeros((N_SAT,N_SAT)); kp_flat = np.zeros((N_SAT,N_SAT))
 ag_gnn  = make_gnn();  x_gnn  = np.zeros((N_SAT,N_SAT)); kp_gnn  = np.zeros((N_SAT,N_SAT))
 
 m_tcp  = blank(); m_tcp["disrupted"]  = []
 m_ind  = blank(); m_ind["disrupted"]  = []
+m_fav  = blank(); m_fav["disrupted"]  = []
+m_cap  = blank(); m_cap["disrupted"]  = []
 m_flat = blank(); m_flat["disrupted"] = []
 m_gnn  = blank(); m_gnn["disrupted"]  = []
 
@@ -952,6 +956,32 @@ for k in range(K_ROUNDS):
     losses = [ag.update() for ag in ag_ind]
     record(m_ind, k, ind_r, ind_rows, losses); m_ind["disrupted"].append(int(disrupted))
 
+    # FedAvg
+    fav_r = []; fav_rows = []
+    for _ in range(STEPS_PER_ROUND):
+        obs = net.step(x_fav)
+        obs_masked = dict(obs); obs_masked["avail"] = obs["avail"] * dmask
+        x_new, kp_fav, step_r = flat_step(ag_fav, obs_masked, x_fav, kp_fav)
+        fav_r.extend(step_r); fav_rows.append(collect(obs_masked, x_new, x_fav))
+        x_fav = x_new.copy()
+    losses = [ag.update() for ag in ag_fav]
+    trunk = fedavg_round(ag_fav, set(visible_satellites(_sat_positions(net.t))))
+    if trunk: broadcast(ag_fav, trunk, set(visible_satellites(_sat_positions(net.t))))
+    record(m_fav, k, fav_r, fav_rows, losses); m_fav["disrupted"].append(int(disrupted))
+
+    # CA-PFedAvg
+    cap_r = []; cap_rows = []
+    for _ in range(STEPS_PER_ROUND):
+        obs = net.step(x_cap)
+        obs_masked = dict(obs); obs_masked["avail"] = obs["avail"] * dmask
+        x_new, kp_cap, step_r = flat_step(ag_cap, obs_masked, x_cap, kp_cap)
+        cap_r.extend(step_r); cap_rows.append(collect(obs_masked, x_new, x_cap))
+        x_cap = x_new.copy()
+    losses = [ag.update() for ag in ag_cap]
+    trunk = fedavg_round(ag_cap, contact)
+    if trunk: broadcast(ag_cap, trunk, contact)
+    record(m_cap, k, cap_r, cap_rows, losses); m_cap["disrupted"].append(int(disrupted))
+
     # Flat-FRL
     flat_r = []; flat_rows = []
     for _ in range(STEPS_PER_ROUND):
@@ -982,12 +1012,12 @@ for k in range(K_ROUNDS):
 
     if k % LOG_EVERY == 0:
         tag = "[DISRUPT]" if disrupted else "         "
-        print(f"Round {k:4d} {tag} | TCP={m_tcp['throughput_gbps'][-1]:.1f}G  Flat={m_flat['throughput_gbps'][-1]:.1f}G  GNN={m_gnn['throughput_gbps'][-1]:.1f}G")
+        print(f"Round {k:4d} {tag} | TCP={m_tcp['throughput_gbps'][-1]:.1f}G  FedAvg={m_fav['throughput_gbps'][-1]:.1f}G  CA={m_cap['throughput_gbps'][-1]:.1f}G  Flat={m_flat['throughput_gbps'][-1]:.1f}G  GNN={m_gnn['throughput_gbps'][-1]:.1f}G")
     if k % 500 == 0:
-        for n, mm in [("tcp",m_tcp),("indppo",m_ind),("flat_frl",m_flat),("gnn_frl",m_gnn)]:
+        for n, mm in [("tcp",m_tcp),("indppo",m_ind),("fedavg",m_fav),("capfedavg",m_cap),("flat_frl",m_flat),("gnn_frl",m_gnn)]:
             save(mm, f"results/disruption/{n}_metrics.json")
 
-for n, mm in [("tcp",m_tcp),("indppo",m_ind),("flat_frl",m_flat),("gnn_frl",m_gnn)]:
+for n, mm in [("tcp",m_tcp),("indppo",m_ind),("fedavg",m_fav),("capfedavg",m_cap),("flat_frl",m_flat),("gnn_frl",m_gnn)]:
     save(mm, f"results/disruption/{n}_metrics.json")
 print("Disruption experiment done")
 import shutil; shutil.copytree("results/disruption", "/content/drive/MyDrive/Rano4_results/disruption", dirs_exist_ok=True)
@@ -1329,9 +1359,11 @@ if rl_d:
 # ── Fig 10: Disruption Resilience ────────────────────────────────────────────
 DM={"TCP-CUBIC":"results/disruption/tcp_metrics.json",
     "Ind-PPO":"results/disruption/indppo_metrics.json",
+    "FedAvg":"results/disruption/fedavg_metrics.json",
+    "CA-PFedAvg":"results/disruption/capfedavg_metrics.json",
     "Flat-FRL":"results/disruption/flat_frl_metrics.json",
     "GNN-FRL":"results/disruption/gnn_frl_metrics.json"}
-DC=["#7f7f7f","#ff7f0e","#d62728","#9467bd"]
+DC=["#7f7f7f","#ff7f0e","#1f77b4","#2ca02c","#d62728","#9467bd"]
 dm={lbl:_loadf(p) for lbl,p in DM.items() if _loadf(p)}
 if dm:
     fig,axes=plt.subplots(1,2,figsize=(13,4))
