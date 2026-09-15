@@ -990,6 +990,8 @@ for k in range(K_ROUNDS):
 for n, mm in [("tcp",m_tcp),("indppo",m_ind),("flat_frl",m_flat),("gnn_frl",m_gnn)]:
     save(mm, f"results/disruption/{n}_metrics.json")
 print("Disruption experiment done")
+import shutil; shutil.copytree("results/disruption", "/content/drive/MyDrive/Rano4_results/disruption", dirs_exist_ok=True)
+print("Disruption saved to Drive")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1092,6 +1094,8 @@ for k in range(K_ROUNDS):
 for n, mm in [("fedavg",m_fv),("capfedavg",m_ca),("flat_frl",m_fl),("gnn_frl",m_gn)]:
     save(mm, f"results/handover/{n}_metrics.json")
 print("Handover experiment done")
+import shutil; shutil.copytree("results/handover", "/content/drive/MyDrive/Rano4_results/handover", dirs_exist_ok=True)
+print("Handover saved to Drive")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1161,6 +1165,8 @@ for k in range(K_ROUNDS):
 
 for n in VARIANTS: save(abl_m[n], f"results/ablation/{n}_metrics.json")
 print("Ablation study done")
+import shutil; shutil.copytree("results/ablation", "/content/drive/MyDrive/Rano4_results/ablation", dirs_exist_ok=True)
+print("Ablation saved to Drive")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
