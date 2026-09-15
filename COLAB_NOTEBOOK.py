@@ -1167,294 +1167,240 @@ print("Ablation study done")
 # CELL 18 — All Plots (run after all experiments complete)
 # ══════════════════════════════════════════════════════════════════════════════
 
-import json
-import os
-import numpy as np
+import json, os, numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from pathlib import Path
 
-FIGS = "results/figures"
-os.makedirs(FIGS, exist_ok=True)
-SMOOTH = 50
-WIN    = 200
+FIGS="results/figures"; os.makedirs(FIGS,exist_ok=True)
+SMOOTH=50; WIN=200
 
-METHODS = {
-    "TCP-CUBIC":  "results/tcp_cubic",
-    "FedAvg":     "results/fedavg",
-    "Ind-PPO":    "results/indppo_isl",
-    "CA-PFedAvg": "results/capfedavg",
-    "Flat-FRL":   "results/flat_frl",
-    "GNN-FRL":    "results/gnn_frl",
-}
-COLORS = ["#7f7f7f", "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
-LABELS = list(METHODS.keys())
-RL     = [l for l in LABELS if l != "TCP-CUBIC"]
-RC     = COLORS[1:]
-
+METHODS={"TCP-CUBIC":"results/tcp_cubic","FedAvg":"results/fedavg",
+          "Ind-PPO":"results/indppo_isl","CA-PFedAvg":"results/capfedavg",
+          "Flat-FRL":"results/flat_frl","GNN-FRL":"results/gnn_frl"}
+COLORS=["#7f7f7f","#1f77b4","#ff7f0e","#2ca02c","#d62728","#9467bd"]
+LABELS=list(METHODS.keys())
 
 def _load(path):
-    p = Path(path) / "metrics.json"
+    p=Path(path)/"metrics.json"
     return json.load(open(p)) if p.exists() else None
-
 
 def _loadf(path):
-    p = Path(path)
-    return json.load(open(p)) if p.exists() else None
+    p=Path(path); return json.load(open(p)) if p.exists() else None
 
+def _sm(arr,w=SMOOTH):
+    arr=np.array(arr,dtype=float)
+    return np.convolve(arr,np.ones(w)/w,mode="valid") if len(arr)>=w else arr
 
-def _sm(arr, w=SMOOTH):
-    arr = np.array(arr, dtype=float)
-    return np.convolve(arr, np.ones(w)/w, mode="valid") if len(arr) >= w else arr
-
-
-def _savefig(fig, name):
-    fig.savefig(f"{FIGS}/{name}.pdf", bbox_inches="tight", dpi=300)
-    fig.savefig(f"{FIGS}/{name}.png", bbox_inches="tight", dpi=150)
+def _save(fig,name):
+    fig.savefig(f"{FIGS}/{name}.pdf",bbox_inches="tight",dpi=300)
+    fig.savefig(f"{FIGS}/{name}.png",bbox_inches="tight",dpi=150)
     print(f"  saved {name}")
 
+data={}
+for lbl,path in METHODS.items():
+    d=_load(path)
+    if d: data[lbl]=d; print(f"[OK] {lbl}")
+    else: print(f"[--] {lbl}")
 
-data = {}
-for lbl, path in METHODS.items():
-    d = _load(path)
-    if d:
-        data[lbl] = d
-        print(f"[OK] {lbl:25s} rounds={len(d['round'])}")
-    else:
-        print(f"[--] {lbl}")
+RL=[l for l in LABELS if l!="TCP-CUBIC"]
+RC=COLORS[1:]
 
-# Fig 1 — Learning curves
-fig, ax = plt.subplots(figsize=(9, 4))
+# ── Fig 1: Learning Curves ────────────────────────────────────────────────────
+fig,ax=plt.subplots(figsize=(9,4))
 if "TCP-CUBIC" in data:
-    ax.axhline(np.mean(data["TCP-CUBIC"]["mean_reward"]), color=COLORS[0], ls="--", lw=1.4, label="TCP-CUBIC (ref)")
-for lbl, clr in zip(RL, RC):
+    ax.axhline(np.mean(data["TCP-CUBIC"]["mean_reward"]),color=COLORS[0],ls="--",lw=1.4,label=f"TCP-CUBIC (ref)")
+for lbl,clr in zip(RL,RC):
     if lbl not in data: continue
-    y = _sm(data[lbl]["mean_reward"])
-    ax.plot(np.arange(len(y)), y, color=clr, lw=1.6, label=lbl)
-ax.set_xlabel("Training Round"); ax.set_ylabel("Mean Reward")
-ax.set_title("Learning Curves"); ax.legend(fontsize=9, ncol=2); ax.grid(alpha=0.3)
-_savefig(fig, "fig01_learning_curves"); plt.close(fig)
+    y=_sm(data[lbl]["mean_reward"]); ax.plot(np.arange(len(y)),y,color=clr,lw=1.6,label=lbl)
+ax.set_xlabel("Training Round",fontsize=12); ax.set_ylabel("Mean Reward",fontsize=12)
+ax.set_title("Learning Curves",fontsize=13); ax.legend(fontsize=9,ncol=2); ax.grid(alpha=0.3)
+_save(fig,"fig01_learning_curves"); plt.close(fig)
 
-# Fig 2 — Throughput
-fig, ax = plt.subplots(figsize=(9, 4))
+# ── Fig 2: Throughput ─────────────────────────────────────────────────────────
+fig,ax=plt.subplots(figsize=(9,4))
 if "TCP-CUBIC" in data:
-    ax.axhline(np.mean(data["TCP-CUBIC"]["throughput_gbps"]), color=COLORS[0], ls="--", lw=1.4, label="TCP-CUBIC (ref)")
-for lbl, clr in zip(RL, RC):
+    ax.axhline(np.mean(data["TCP-CUBIC"]["throughput_gbps"]),color=COLORS[0],ls="--",lw=1.4,label="TCP-CUBIC (ref)")
+for lbl,clr in zip(RL,RC):
     if lbl not in data: continue
-    y = _sm(data[lbl]["throughput_gbps"])
-    ax.plot(np.arange(len(y)), y, color=clr, lw=1.6, label=lbl)
-ax.set_xlabel("Training Round"); ax.set_ylabel("Throughput (Gbps)")
-ax.set_title("Network Throughput"); ax.legend(fontsize=9, ncol=2); ax.grid(alpha=0.3)
-_savefig(fig, "fig02_throughput"); plt.close(fig)
+    y=_sm(data[lbl]["throughput_gbps"]); ax.plot(np.arange(len(y)),y,color=clr,lw=1.6,label=lbl)
+ax.set_xlabel("Training Round",fontsize=12); ax.set_ylabel("Throughput (Gbps)",fontsize=12)
+ax.set_title("Network Throughput",fontsize=13); ax.legend(fontsize=9,ncol=2); ax.grid(alpha=0.3)
+_save(fig,"fig02_throughput"); plt.close(fig)
 
-# Fig 3 — Drop rate
-fig, ax = plt.subplots(figsize=(9, 4))
+# ── Fig 3: Drop Rate ──────────────────────────────────────────────────────────
+fig,ax=plt.subplots(figsize=(9,4))
 if "TCP-CUBIC" in data:
-    ax.axhline(np.mean(data["TCP-CUBIC"]["drop_rate"]), color=COLORS[0], ls="--", lw=1.4, label="TCP-CUBIC (ref)")
-for lbl, clr in zip(RL, RC):
+    ax.axhline(np.mean(data["TCP-CUBIC"]["drop_rate"]),color=COLORS[0],ls="--",lw=1.4,label="TCP-CUBIC (ref)")
+for lbl,clr in zip(RL,RC):
     if lbl not in data: continue
-    y = _sm(data[lbl]["drop_rate"])
-    ax.plot(np.arange(len(y)), y, color=clr, lw=1.6, label=lbl)
-ax.set_xlabel("Training Round"); ax.set_ylabel("Packet Drop Rate")
-ax.set_title("Packet Drop Rate"); ax.legend(fontsize=9, ncol=2); ax.grid(alpha=0.3)
-_savefig(fig, "fig03_drop_rate"); plt.close(fig)
+    y=_sm(data[lbl]["drop_rate"]); ax.plot(np.arange(len(y)),y,color=clr,lw=1.6,label=lbl)
+ax.set_xlabel("Training Round",fontsize=12); ax.set_ylabel("Packet Drop Rate",fontsize=12)
+ax.set_title("Packet Drop Rate",fontsize=13); ax.legend(fontsize=9,ncol=2); ax.grid(alpha=0.3)
+_save(fig,"fig03_drop_rate"); plt.close(fig)
 
-# Fig 4 — Congestion kappa
-fig, ax = plt.subplots(figsize=(9, 4))
+# ── Fig 4: Congestion κ ───────────────────────────────────────────────────────
+fig,ax=plt.subplots(figsize=(9,4))
 if "TCP-CUBIC" in data:
-    ax.axhline(np.mean(data["TCP-CUBIC"]["mean_kappa"]), color=COLORS[0], ls="--", lw=1.4, label="TCP-CUBIC (ref)")
-for lbl, clr in zip(RL, RC):
+    ax.axhline(np.mean(data["TCP-CUBIC"]["mean_kappa"]),color=COLORS[0],ls="--",lw=1.4,label="TCP-CUBIC (ref)")
+for lbl,clr in zip(RL,RC):
     if lbl not in data: continue
-    y = _sm(data[lbl]["mean_kappa"])
-    ax.plot(np.arange(len(y)), y, color=clr, lw=1.6, label=lbl)
-ax.set_xlabel("Training Round"); ax.set_ylabel("Mean Queue Occupancy k")
-ax.set_title("Congestion Level"); ax.legend(fontsize=9, ncol=2); ax.grid(alpha=0.3)
-_savefig(fig, "fig04_kappa"); plt.close(fig)
+    y=_sm(data[lbl]["mean_kappa"]); ax.plot(np.arange(len(y)),y,color=clr,lw=1.6,label=lbl)
+ax.set_xlabel("Training Round",fontsize=12); ax.set_ylabel("Mean Queue Occupancy κ",fontsize=12)
+ax.set_title("Congestion Level (κ)",fontsize=13); ax.legend(fontsize=9,ncol=2); ax.grid(alpha=0.3)
+_save(fig,"fig04_kappa"); plt.close(fig)
 
-# Fig 5 — Link utilization
-fig, ax = plt.subplots(figsize=(9, 4))
+# ── Fig 5: Link Utilization ───────────────────────────────────────────────────
+fig,ax=plt.subplots(figsize=(9,4))
 if "TCP-CUBIC" in data:
-    ax.axhline(np.mean(data["TCP-CUBIC"]["link_utilization"]), color=COLORS[0], ls="--", lw=1.4, label="TCP-CUBIC (ref)")
-for lbl, clr in zip(RL, RC):
+    ax.axhline(np.mean(data["TCP-CUBIC"]["link_utilization"]),color=COLORS[0],ls="--",lw=1.4,label="TCP-CUBIC (ref)")
+for lbl,clr in zip(RL,RC):
     if lbl not in data: continue
-    y = _sm(data[lbl]["link_utilization"])
-    ax.plot(np.arange(len(y)), y, color=clr, lw=1.6, label=lbl)
-ax.set_xlabel("Training Round"); ax.set_ylabel("Link Utilization")
-ax.set_title("ISL Link Utilization"); ax.legend(fontsize=9, ncol=2); ax.grid(alpha=0.3)
-_savefig(fig, "fig05_utilization"); plt.close(fig)
+    y=_sm(data[lbl]["link_utilization"]); ax.plot(np.arange(len(y)),y,color=clr,lw=1.6,label=lbl)
+ax.set_xlabel("Training Round",fontsize=12); ax.set_ylabel("Link Utilization",fontsize=12)
+ax.set_title("ISL Link Utilization",fontsize=13); ax.legend(fontsize=9,ncol=2); ax.grid(alpha=0.3)
+_save(fig,"fig05_utilization"); plt.close(fig)
 
-# Fig 6 — P99 tail latency
-fig, ax = plt.subplots(figsize=(9, 4))
-for lbl, clr in zip(LABELS, COLORS):
+# ── Fig 6: P99 Tail Latency ───────────────────────────────────────────────────
+fig,ax=plt.subplots(figsize=(9,4))
+for lbl,clr in zip(LABELS,COLORS):
     if lbl not in data or "p99_rtt" not in data[lbl]: continue
-    y = _sm(data[lbl]["p99_rtt"])
-    ax.plot(np.arange(len(y)), y, color=clr, lw=1.6, label=lbl)
-ax.set_xlabel("Training Round"); ax.set_ylabel("P99 RTT (seconds)")
-ax.set_title("Tail Latency (P99 RTT)"); ax.legend(fontsize=9, ncol=2); ax.grid(alpha=0.3)
-_savefig(fig, "fig06_p99_latency"); plt.close(fig)
+    y=_sm(data[lbl]["p99_rtt"]); ax.plot(np.arange(len(y)),y,color=clr,lw=1.6,label=lbl)
+ax.set_xlabel("Training Round",fontsize=12); ax.set_ylabel("P99 RTT (seconds)",fontsize=12)
+ax.set_title("Tail Latency (P99 RTT)",fontsize=13); ax.legend(fontsize=9,ncol=2); ax.grid(alpha=0.3)
+_save(fig,"fig06_p99_latency"); plt.close(fig)
 
-# Fig 7 — Steady-state bar chart
-fig, axes = plt.subplots(1, 4, figsize=(17, 4))
-for metric, ylabel, ax in [
-    ("throughput_gbps",  "Throughput (Gbps)", axes[0]),
-    ("drop_rate",        "Drop Rate",         axes[1]),
-    ("link_utilization", "Link Utilization",  axes[2]),
-    ("p99_rtt",          "P99 RTT (s)",       axes[3]),
-]:
-    vals, errs, lbls, clrs = [], [], [], []
-    for lbl, clr in zip(LABELS, COLORS):
+# ── Fig 7: Steady-state bar chart ─────────────────────────────────────────────
+fig,axes=plt.subplots(1,4,figsize=(17,4))
+for metric,ylabel,ax in [("throughput_gbps","Throughput (Gbps)",axes[0]),
+                          ("drop_rate","Drop Rate",axes[1]),
+                          ("link_utilization","Link Utilization",axes[2]),
+                          ("p99_rtt","P99 RTT (s)",axes[3])]:
+    vals,errs,lbls,clrs=[],[],[],[]
+    for lbl,clr in zip(LABELS,COLORS):
         if lbl not in data or metric not in data[lbl]: continue
-        arr  = np.array(data[lbl][metric])
-        tail = arr[-WIN:] if len(arr) >= WIN else arr
-        vals.append(tail.mean()); errs.append(tail.std())
-        lbls.append(lbl); clrs.append(clr)
-    x = np.arange(len(vals))
-    ax.bar(x, vals, yerr=errs, capsize=4, color=clrs, alpha=0.85)
-    ax.set_xticks(x); ax.set_xticklabels(lbls, fontsize=7, rotation=35, ha="right")
-    ax.set_ylabel(ylabel, fontsize=9); ax.grid(axis="y", alpha=0.3)
-fig.suptitle(f"Steady-State Performance (last {WIN} rounds)"); fig.tight_layout()
-_savefig(fig, "fig07_steady_state"); plt.close(fig)
+        arr=np.array(data[lbl][metric]); tail=arr[-WIN:] if len(arr)>=WIN else arr
+        vals.append(tail.mean()); errs.append(tail.std()); lbls.append(lbl); clrs.append(clr)
+    x=np.arange(len(vals))
+    ax.bar(x,vals,yerr=errs,capsize=4,color=clrs,alpha=0.85)
+    ax.set_xticks(x); ax.set_xticklabels(lbls,fontsize=7,rotation=35,ha="right")
+    ax.set_ylabel(ylabel,fontsize=9); ax.grid(axis="y",alpha=0.3)
+fig.suptitle(f"Steady-State Performance (last {WIN} rounds)",fontsize=12); fig.tight_layout()
+_save(fig,"fig07_steady_state_bar"); plt.close(fig)
 
-# Fig 8 — Jain's Fairness Index
-def jain(arr):
-    x = np.array(arr, dtype=float); n = len(x)
-    return float(x.sum()**2 / (n * (x**2).sum() + 1e-12)) if n > 0 else 0.0
-
-fig, ax = plt.subplots(figsize=(9, 4))
-has = False
-for lbl, clr in zip(LABELS, COLORS):
+# ── Fig 8: Jain's Fairness Index ──────────────────────────────────────────────
+def _jain(arr): x=np.array(arr,dtype=float); n=len(x); return float(x.sum()**2/(n*(x**2).sum()+1e-12)) if n>0 else 0.0
+fig,ax=plt.subplots(figsize=(9,4))
+has=False
+for lbl,clr in zip(LABELS,COLORS):
     if lbl not in data or "throughput_gbps" not in data[lbl]: continue
-    t  = np.array(data[lbl]["throughput_gbps"]); fw = WIN // 2
-    fv = [jain(t[i:i+fw]) for i in range(0, len(t)-fw, fw//5)]
-    if fv:
-        ax.plot(np.linspace(0, len(t), len(fv)), fv, color=clr, lw=1.5, label=lbl)
-        has = True
+    t=np.array(data[lbl]["throughput_gbps"]); fw=WIN//2
+    fairness=[_jain(t[i:i+fw]) for i in range(0,len(t)-fw,fw//5)]
+    if fairness:
+        ax.plot(np.linspace(0,len(t),len(fairness)),fairness,color=clr,lw=1.5,label=lbl); has=True
 if has:
-    ax.set_xlabel("Training Round"); ax.set_ylabel("Jain's Fairness Index")
-    ax.set_ylim(0, 1.05); ax.set_title("Throughput Fairness (J=1 is perfect)")
-    ax.legend(fontsize=9, ncol=2); ax.grid(alpha=0.3)
-_savefig(fig, "fig08_fairness"); plt.close(fig)
+    ax.set_xlabel("Training Round",fontsize=12); ax.set_ylabel("Jain's Fairness Index",fontsize=12)
+    ax.set_ylim(0,1.05); ax.set_title("Throughput Fairness (J=1 is perfectly fair)",fontsize=12)
+    ax.legend(fontsize=9,ncol=2); ax.grid(alpha=0.3)
+_save(fig,"fig08_fairness"); plt.close(fig)
 
-# Fig 9 — Convergence speed
-rl_d = [l for l in RL if l in data]
+# ── Fig 9: Convergence Speed ──────────────────────────────────────────────────
+rl_d=[l for l in RL if l in data]
 if rl_d:
-    best   = max(np.mean(data[l]["mean_reward"][-200:]) for l in rl_d)
-    THRESH = 0.90 * best
-    fig, ax = plt.subplots(figsize=(7, 4))
-    for i, (lbl, clr) in enumerate(zip(LABELS, COLORS)):
+    best=max(np.mean(data[l]["mean_reward"][-200:]) for l in rl_d)
+    THRESH=0.90*best; print(f"Convergence threshold: {THRESH:.4f}")
+    fig,ax=plt.subplots(figsize=(7,4))
+    for i,(lbl,clr) in enumerate(zip(LABELS,COLORS)):
         if lbl not in data: continue
-        r  = np.array(data[lbl]["mean_reward"])
-        cr = np.where(r >= THRESH)[0]
-        cv = int(cr[0]) if len(cr) > 0 else len(r)
-        ax.barh(i, cv, color=clr, alpha=0.8)
-        ax.text(cv + 20, i, str(cv), va="center", fontsize=9)
-    ax.set_yticks(range(len(LABELS))); ax.set_yticklabels(LABELS, fontsize=10)
-    ax.set_xlabel("Rounds to 90% of best reward")
-    ax.set_title("Convergence Speed"); ax.axvline(3000, ls="--", color="k", alpha=0.3)
-    ax.grid(axis="x", alpha=0.3)
-    _savefig(fig, "fig09_convergence"); plt.close(fig)
+        r=np.array(data[lbl]["mean_reward"]); cr=np.where(r>=THRESH)[0]
+        cv=int(cr[0]) if len(cr)>0 else len(r)
+        ax.barh(i,cv,color=clr,alpha=0.8); ax.text(cv+20,i,str(cv),va="center",fontsize=9)
+    ax.set_yticks(range(len(LABELS))); ax.set_yticklabels(LABELS,fontsize=10)
+    ax.set_xlabel("Rounds to 90% of best reward",fontsize=11)
+    ax.set_title("Convergence Speed",fontsize=12); ax.axvline(3000,ls="--",color="k",alpha=0.3)
+    ax.grid(axis="x",alpha=0.3); _save(fig,"fig09_convergence"); plt.close(fig)
 
-# Fig 10 — Disruption resilience
-DM = {"TCP-CUBIC":"results/disruption/tcp_metrics.json",
-      "Ind-PPO":"results/disruption/indppo_metrics.json",
-      "Flat-FRL":"results/disruption/flat_frl_metrics.json",
-      "GNN-FRL":"results/disruption/gnn_frl_metrics.json"}
-DC  = ["#7f7f7f","#ff7f0e","#d62728","#9467bd"]
-dm  = {lbl: _loadf(p) for lbl, p in DM.items() if _loadf(p)}
+# ── Fig 10: Disruption Resilience ────────────────────────────────────────────
+DM={"TCP-CUBIC":"results/disruption/tcp_metrics.json",
+    "Ind-PPO":"results/disruption/indppo_metrics.json",
+    "Flat-FRL":"results/disruption/flat_frl_metrics.json",
+    "GNN-FRL":"results/disruption/gnn_frl_metrics.json"}
+DC=["#7f7f7f","#ff7f0e","#d62728","#9467bd"]
+dm={lbl:_loadf(p) for lbl,p in DM.items() if _loadf(p)}
 if dm:
-    fig, axes = plt.subplots(1, 2, figsize=(13, 4))
-    for metric, ylabel, ax in [("throughput_gbps","Throughput (Gbps)",axes[0]),
-                                ("drop_rate","Drop Rate",axes[1])]:
-        for lbl, clr in zip(DM.keys(), DC):
+    fig,axes=plt.subplots(1,2,figsize=(13,4))
+    for metric,ylabel,ax in [("throughput_gbps","Throughput (Gbps)",axes[0]),("drop_rate","Drop Rate",axes[1])]:
+        for lbl,clr in zip(DM.keys(),DC):
             if lbl not in dm: continue
-            y = _sm(dm[lbl][metric], w=20)
-            ax.plot(np.arange(len(y)), y, color=clr, lw=1.5, label=lbl)
-        for s in range(0, 3000, 500):
-            ax.axvspan(s, s + 50, alpha=0.12, color="red")
-        ax.set_xlabel("Round"); ax.set_ylabel(ylabel)
-        ax.legend(fontsize=9); ax.grid(alpha=0.3)
-    axes[0].set_title("Throughput Under Disruptions (red=outage)")
-    axes[1].set_title("Drop Rate Under Disruptions")
-    fig.tight_layout()
-    _savefig(fig, "fig10_disruption"); plt.close(fig)
+            y=_sm(dm[lbl][metric],w=20); ax.plot(np.arange(len(y)),y,color=clr,lw=1.5,label=lbl)
+        for s in range(0,3000,500): ax.axvspan(s,s+50,alpha=0.12,color="red")
+        ax.set_xlabel("Round",fontsize=11); ax.set_ylabel(ylabel,fontsize=11); ax.legend(fontsize=9); ax.grid(alpha=0.3)
+    axes[0].set_title("Throughput Under ISL Disruptions (red=outage)",fontsize=11)
+    axes[1].set_title("Drop Rate Under Disruptions",fontsize=11); fig.tight_layout()
+    _save(fig,"fig10_disruption"); plt.close(fig)
 
-# Fig 11 — Handover
-HM = {"FedAvg":"results/handover/fedavg_metrics.json",
-      "CA-PFedAvg":"results/handover/capfedavg_metrics.json",
-      "Flat-FRL":"results/handover/flat_frl_metrics.json",
-      "GNN-FRL":"results/handover/gnn_frl_metrics.json"}
-HC  = ["#1f77b4","#2ca02c","#d62728","#9467bd"]
-hm  = {lbl: _loadf(p) for lbl, p in HM.items() if _loadf(p)}
+# ── Fig 11: Handover Scenario ─────────────────────────────────────────────────
+HM={"FedAvg":"results/handover/fedavg_metrics.json",
+    "CA-PFedAvg":"results/handover/capfedavg_metrics.json",
+    "Flat-FRL":"results/handover/flat_frl_metrics.json",
+    "GNN-FRL":"results/handover/gnn_frl_metrics.json"}
+HC=["#1f77b4","#2ca02c","#d62728","#9467bd"]
+hm={lbl:_loadf(p) for lbl,p in HM.items() if _loadf(p)}
 if hm:
-    fig, axes = plt.subplots(1, 3, figsize=(16, 4))
-    for lbl, clr in zip(HM.keys(), HC):
+    fig,axes=plt.subplots(1,3,figsize=(16,4))
+    for lbl,clr in zip(HM.keys(),HC):
         if lbl not in hm: continue
-        y = _sm(hm[lbl]["throughput_gbps"], w=20)
-        axes[0].plot(np.arange(len(y)), y, color=clr, lw=1.5, label=lbl)
-    axes[0].set_title("Throughput During Handover"); axes[0].legend(fontsize=8); axes[0].grid(alpha=0.3)
+        y=_sm(hm[lbl]["throughput_gbps"],w=20); axes[0].plot(np.arange(len(y)),y,color=clr,lw=1.5,label=lbl)
+    axes[0].set_title("Throughput During Handover",fontsize=11); axes[0].legend(fontsize=8); axes[0].grid(alpha=0.3)
     axes[0].set_xlabel("Round"); axes[0].set_ylabel("Throughput (Gbps)")
-    for lbl, clr in zip(HM.keys(), HC):
+    for lbl,clr in zip(HM.keys(),HC):
         if lbl not in hm or "fed_participants" not in hm[lbl]: continue
-        y = _sm(hm[lbl]["fed_participants"], w=20)
-        axes[1].plot(np.arange(len(y)), y, color=clr, lw=1.5, label=lbl)
-    axes[1].set_title("Federation Participants"); axes[1].legend(fontsize=8); axes[1].grid(alpha=0.3)
-    axes[1].set_xlabel("Round"); axes[1].set_ylabel("Satellites in Federation")
+        y=_sm(hm[lbl]["fed_participants"],w=20); axes[1].plot(np.arange(len(y)),y,color=clr,lw=1.5,label=lbl)
+    axes[1].set_title("Federation Participants",fontsize=11); axes[1].legend(fontsize=8); axes[1].grid(alpha=0.3)
+    axes[1].set_xlabel("Round"); axes[1].set_ylabel("# Satellites in Federation")
     if "FedAvg" in hm and "gs_visible_count" in hm["FedAvg"]:
-        vis = np.array(hm["FedAvg"]["gs_visible_count"]); y = _sm(vis, w=20)
-        axes[2].fill_between(np.arange(len(y)), y, alpha=0.4, color="#1f77b4", label="Direct only")
+        vis=np.array(hm["FedAvg"]["gs_visible_count"]); y=_sm(vis,w=20); axes[2].fill_between(np.arange(len(y)),y,alpha=0.4,color="#1f77b4",label="Direct only")
     if "CA-PFedAvg" in hm and "fed_participants" in hm["CA-PFedAvg"]:
-        rel = np.array(hm["CA-PFedAvg"]["fed_participants"]); y2 = _sm(rel, w=20)
-        axes[2].fill_between(np.arange(len(y2)), y2, alpha=0.4, color="#2ca02c", label="Relay-expanded")
-    axes[2].set_title("Direct vs Relay Contact"); axes[2].legend(fontsize=9); axes[2].grid(alpha=0.3)
+        rel=np.array(hm["CA-PFedAvg"]["fed_participants"]); y2=_sm(rel,w=20); axes[2].fill_between(np.arange(len(y2)),y2,alpha=0.4,color="#2ca02c",label="Relay-expanded")
+    axes[2].set_title("Direct vs Relay Contact",fontsize=11); axes[2].legend(fontsize=9); axes[2].grid(alpha=0.3)
     axes[2].set_xlabel("Round"); axes[2].set_ylabel("Satellite Count")
-    fig.suptitle("Handover: FedAvg Fails in Eclipse, CA-PFedAvg Survives via Relay")
-    fig.tight_layout()
-    _savefig(fig, "fig11_handover"); plt.close(fig)
+    fig.suptitle("Handover: FedAvg Fails During Eclipse, CA-PFedAvg Survives",fontsize=12); fig.tight_layout()
+    _save(fig,"fig11_handover"); plt.close(fig)
 
-# Fig 12 — Ablation
-ABL = {"full":"GNN-FRL\n(Full)","no_gossip":"No\nGossip",
-       "no_relay":"No\nRelay","flat":"Flat\nState","ind":"No\nFed"}
-AC  = ["#9467bd","#17becf","#bcbd22","#d62728","#ff7f0e"]
-abm = {n: _loadf(f"results/ablation/{n}_metrics.json") for n in ABL}
-abm = {n: v for n, v in abm.items() if v}
+# ── Fig 12: Ablation Study ────────────────────────────────────────────────────
+ABL={"full":"GNN-FRL\n(Full)","no_gossip":"No\nGossip","no_relay":"No\nRelay","flat":"Flat\nState","ind":"No\nFed"}
+AC=["#9467bd","#17becf","#bcbd22","#d62728","#ff7f0e"]
+abm={n:_loadf(f"results/ablation/{n}_metrics.json") for n in ABL if _loadf(f"results/ablation/{n}_metrics.json")}
 if abm:
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4))
-    for metric, ylabel, ax in [("throughput_gbps","Throughput (Gbps)",axes[0]),
-                                ("drop_rate","Drop Rate",axes[1]),
-                                ("link_utilization","Link Util",axes[2])]:
-        vals, errs, lbls, clrs = [], [], [], []
-        for n, clr in zip(ABL.keys(), AC):
+    fig,axes=plt.subplots(1,3,figsize=(13,4))
+    for metric,ylabel,ax in [("throughput_gbps","Throughput (Gbps)",axes[0]),("drop_rate","Drop Rate",axes[1]),("link_utilization","Link Util",axes[2])]:
+        vals,errs,lbls,clrs=[],[],[],[]
+        for n,clr in zip(ABL.keys(),AC):
             if n not in abm: continue
-            arr  = np.array(abm[n][metric])
-            tail = arr[-WIN:] if len(arr) >= WIN else arr
-            vals.append(tail.mean()); errs.append(tail.std())
-            lbls.append(ABL[n]); clrs.append(clr)
-        x = np.arange(len(vals))
-        ax.bar(x, vals, yerr=errs, capsize=4, color=clrs, alpha=0.85)
-        ax.set_xticks(x); ax.set_xticklabels(lbls, fontsize=9)
-        ax.set_ylabel(ylabel); ax.grid(axis="y", alpha=0.3)
-    fig.suptitle("Ablation Study — Component Contribution"); fig.tight_layout()
-    _savefig(fig, "fig12_ablation"); plt.close(fig)
+            arr=np.array(abm[n][metric]); tail=arr[-WIN:] if len(arr)>=WIN else arr
+            vals.append(tail.mean()); errs.append(tail.std()); lbls.append(ABL[n]); clrs.append(clr)
+        x=np.arange(len(vals)); ax.bar(x,vals,yerr=errs,capsize=4,color=clrs,alpha=0.85)
+        ax.set_xticks(x); ax.set_xticklabels(lbls,fontsize=9); ax.set_ylabel(ylabel,fontsize=10); ax.grid(axis="y",alpha=0.3)
+    fig.suptitle("Ablation Study — Each Component's Contribution",fontsize=12); fig.tight_layout()
+    _save(fig,"fig12_ablation"); plt.close(fig)
 
-# Summary table
-print("\n" + "="*80)
-print(f"{'Method':<22} {'Tput(Gbps)':>12} {'Drop':>8} {'Kappa':>8} {'Util':>8} {'P99-RTT':>10}")
-print("="*80)
-rows = []
+# ── Table 1: CSV summary ──────────────────────────────────────────────────────
+print("\n"+"="*85)
+print(f"{'Method':<25}{'Throughput':>14}{'Drop':>10}{'Kappa':>8}{'Util':>8}{'P99-RTT':>10}")
+print("="*85)
+rows=[]
 for lbl in LABELS:
     if lbl not in data: continue
-    def tm(key):
-        arr = np.array(data[lbl].get(key, [0]))
-        return float(arr[-WIN:].mean() if len(arr) >= WIN else arr.mean())
-    row = [lbl, tm("throughput_gbps"), tm("drop_rate"), tm("mean_kappa"), tm("link_utilization"), tm("p99_rtt")]
-    print(f"{lbl:<22} {row[1]:>12.2f} {row[2]:>8.4f} {row[3]:>8.4f} {row[4]:>8.4f} {row[5]:>10.5f}")
+    d=data[lbl]
+    def tm(key): arr=np.array(d.get(key,[0])); return float(arr[-WIN:].mean() if len(arr)>=WIN else arr.mean())
+    row=[lbl,tm("throughput_gbps"),tm("drop_rate"),tm("mean_kappa"),tm("link_utilization"),tm("p99_rtt")]
+    print(f"{lbl:<25}{row[1]:>14.2f}{row[2]:>10.4f}{row[3]:>8.4f}{row[4]:>8.4f}{row[5]:>10.5f}")
     rows.append(row)
-with open(f"{FIGS}/table1_summary.csv", "w") as f:
+with open(f"{FIGS}/table1_summary.csv","w") as f:
     f.write("Method,Throughput_Gbps,Drop_Rate,Mean_Kappa,Link_Util,P99_RTT_s\n")
-    for r in rows:
-        f.write(",".join(str(v) for v in r) + "\n")
-print("="*80)
-print(f"\n12 figures + table1_summary.csv saved to {FIGS}/")
+    for r in rows: f.write(",".join(str(v) for v in r)+"\n")
+print("="*85)
+print(f"\nAll 12 figures + table saved to {FIGS}/")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
