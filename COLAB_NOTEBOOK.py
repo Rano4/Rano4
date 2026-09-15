@@ -883,7 +883,7 @@ import random as _random
 
 DISRUPT_EVERY = 500
 DISRUPT_LEN   = 50
-DISRUPT_FRAC  = 0.20
+DISRUPT_FRAC  = 0.30
 
 
 def make_dmask(seed):
@@ -1115,11 +1115,11 @@ abl_x  = {n: np.zeros((N_SAT, N_SAT)) for n in VARIANTS}
 abl_kp = {n: np.zeros((N_SAT, N_SAT)) for n in VARIANTS}
 abl_m  = {n: blank() for n in VARIANTS}
 
-net2 = ISLNetwork(seed=42)
+nets = {n: ISLNetwork(seed=42) for n in VARIANTS}   # separate network per variant
 
 for k in range(K_ROUNDS):
-    _, _, avail_g = compute_isl_graph(net2.t)
-    pos     = _sat_positions(net2.t)
+    _, _, avail_g = compute_isl_graph(nets["full"].t)
+    pos     = _sat_positions(nets["full"].t)
     direct  = visible_satellites(pos)
     c_relay = relay_contact_set(direct, avail_g)
     c_dir   = set(direct)
@@ -1129,7 +1129,7 @@ for k in range(K_ROUNDS):
         use_gnn = name in ("full", "no_gossip", "no_relay")
         r = []; rows = []
         for _ in range(STEPS_PER_ROUND):
-            obs = net2.step(abl_x[name])
+            obs = nets[name].step(abl_x[name])
             if use_gnn:
                 x_new, kp_new, step_r = gnn_step(agents, obs, abl_x[name], abl_kp[name])
             else:
