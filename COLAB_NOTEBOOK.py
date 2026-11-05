@@ -1200,7 +1200,184 @@ print("Ablation saved to Drive")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# CELL 18 — All Plots (run after all experiments complete)
+# CELL 18 — Multi-Seed Training (nominal scenario, all 5 schemes)
+# Run this cell instead of CELL 9–14 if you want multi-seed results.
+# Seeds: [42, 123, 7]  — saves each seed separately, then computes mean±std.
+# ══════════════════════════════════════════════════════════════════════════════
+
+import torch
+
+SEEDS = [42, 123, 7]
+
+SCHEMES = {
+    "tcp_cubic":  {"make": None,       "step": None,       "fed": "none"},
+    "indppo_isl": {"make": make_flat,  "step": flat_step,  "fed": "none"},
+    "fedavg":     {"make": make_flat,  "step": flat_step,  "fed": "fedavg"},
+    "capfedavg":  {"make": make_flat,  "step": flat_step,  "fed": "capfedavg"},
+    "flat_frl":   {"make": make_flat,  "step": flat_step,  "fed": "flat_frl"},
+    "gnn_frl":    {"make": make_gnn,   "step": gnn_step,   "fed": "gnn_frl"},
+}
+
+
+def run_one_scheme(name, cfg, seed):
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    net    = ISLNetwork(seed=seed)
+    agents = cfg["make"]() if cfg["make"] else None
+    x_prev = np.zeros((N_SAT, N_SAT))
+    kp     = np.zeros((N_SAT, N_SAT))
+    m      = blank()
+
+    for k in range(K_ROUNDS):
+        rewards = []; rows = []
+
+        # ── TCP-CUBIC (no agents) ──
+        if name == "tcp_cubic":
+            from sim.baselines.tcp_cubic import tcp_cubic_step
+            for _ in range(STEPS_PER_ROUND):
+                obs    = net.step(x_prev)
+                x_new  = tcp_cubic_step(obs, x_prev)
+                rows.append(collect(obs, x_new, x_prev))
+                x_prev = x_new.copy()
+            record(m, k, [], rows, [0.0])
+            if k % LOG_EVERY == 0:
+                print(f"[seed={seed}] tcp_cubic Round {k:4d} | tput={m['throughput_gbps'][-1]:.1f}G")
+            continue
+
+        # ── RL schemes ──
+        for _ in range(STEPS_PER_ROUND):
+            obs = net.step(x_prev)
+            x_new, kp, step_r = cfg["step"](agents, obs, x_prev, kp)
+            rows.append(collect(obs, x_new, x_prev))
+            rewards.extend(step_r)
+            x_prev = x_new.copy()
+
+        losses = [ag.update() for ag in agents]
+
+        _, _, avail_g = compute_isl_graph(net.t)
+        pos    = _sat_positions(net.t)
+        direct = visible_satellites(pos)
+
+        fed = cfg["fed"]
+        if fed == "fedavg":
+            trunk = fedavg_round(agents, direct)
+            if trunk: broadcast(agents, trunk, direct)
+        elif fed in ("capfedavg", "flat_frl", "gnn_frl"):
+            contact = relay_contact_set(direct, avail_g)
+            if fed in ("flat_frl", "gnn_frl"):
+                isl_gossip_round(agents, avail_g)
+            trunk = fedavg_round(agents, contact)
+            if trunk: broadcast(agents, trunk, contact)
+
+        record(m, k, rewards, rows, losses)
+        if k % LOG_EVERY == 0:
+            print(f"[seed={seed}] {name} Round {k:4d} | reward={m['mean_reward'][-1]:+.4f}  tput={m['throughput_gbps'][-1]:.1f}G")
+
+    return m
+
+
+# ── Run all seeds × all schemes ──
+for name, cfg in SCHEMES.items():
+    for seed in SEEDS:
+        out_path = f"results/multiseed/{name}/seed_{seed}/metrics.json"
+        if Path(out_path).exists():
+            print(f"[skip] {name} seed={seed} already done")
+            continue
+        print(f"\n{'='*60}\n{name}  seed={seed}\n{'='*60}")
+        m = run_one_scheme(name, cfg, seed)
+        save(m, out_path)
+        print(f"Saved → {out_path}")
+
+print("\nAll multi-seed runs complete!")
+import shutil; shutil.copytree("results/multiseed", "/content/drive/MyDrive/Rano4_results/multiseed", dirs_exist_ok=True)
+print("Multi-seed results saved to Drive")
+
+
+# ── Aggregate: compute mean ± std per scheme ──
+import json, numpy as np
+from pathlib import Path
+
+AGG = {}
+for name in SCHEMES:
+    seed_data = []
+    for seed in SEEDS:
+        p = f"results/multiseed/{name}/seed_{seed}/metrics.json"
+        if Path(p).exists():
+            seed_data.append(json.load(open(p)))
+    if not seed_data:
+        continue
+    keys = ["mean_reward", "throughput_gbps", "drop_rate", "mean_kappa", "link_utilization"]
+    AGG[name] = {}
+    for key in keys:
+        arr = np.array([d[key] for d in seed_data])  # (n_seeds, K_ROUNDS)
+        AGG[name][key] = {
+            "mean": arr.mean(axis=0).tolist(),
+            "std":  arr.std(axis=0).tolist(),
+        }
+    AGG[name]["round"] = seed_data[0]["round"]
+
+save(AGG, "results/multiseed/aggregated.json")
+print("Aggregated mean±std saved → results/multiseed/aggregated.json")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CELL 19 — Multi-Seed Plot (learning curves with shaded std)
+# ══════════════════════════════════════════════════════════════════════════════
+
+import json, numpy as np
+import matplotlib.pyplot as plt
+from pathlib import Path
+
+AGG   = json.load(open("results/multiseed/aggregated.json"))
+SMOOTH = 50
+
+COLORS = {
+    "tcp_cubic":  "#888888",
+    "indppo_isl": "#e6194b",
+    "fedavg":     "#f58231",
+    "capfedavg":  "#ffe119",
+    "flat_frl":   "#4363d8",
+    "gnn_frl":    "#3cb44b",
+}
+LABELS = {
+    "tcp_cubic":  "TCP-CUBIC",
+    "indppo_isl": "Ind-PPO",
+    "fedavg":     "FedAvg",
+    "capfedavg":  "CA-PFedAvg",
+    "flat_frl":   "Flat-FRL",
+    "gnn_frl":    "GNN-FRL (proposed)",
+}
+
+fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+
+for name, data in AGG.items():
+    if name == "tcp_cubic":
+        continue
+    rounds = np.array(data["round"])
+    for ax, key, ylabel in zip(axes,
+                                ["mean_reward", "throughput_gbps"],
+                                ["Mean Reward", "Throughput (Gbps)"]):
+        mu  = np.convolve(data[key]["mean"], np.ones(SMOOTH)/SMOOTH, mode="valid")
+        sig = np.convolve(data[key]["std"],  np.ones(SMOOTH)/SMOOTH, mode="valid")
+        x   = rounds[:len(mu)]
+        c   = COLORS[name]
+        ax.plot(x, mu,  color=c, label=LABELS[name], linewidth=1.5)
+        ax.fill_between(x, mu-sig, mu+sig, color=c, alpha=0.15)
+
+for ax, title in zip(axes, ["Reward Convergence", "Throughput"]):
+    ax.set_xlabel("Federation Round")
+    ax.set_title(title)
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3)
+
+plt.tight_layout()
+plt.savefig("results/figures/multiseed_learning.pdf", bbox_inches="tight", dpi=150)
+plt.show()
+print("Multi-seed plot saved → results/figures/multiseed_learning.pdf")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CELL 20 — All Plots (run after all experiments complete)
 # ══════════════════════════════════════════════════════════════════════════════
 
 import json, os, numpy as np
